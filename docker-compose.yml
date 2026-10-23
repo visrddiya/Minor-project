@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: queuesphere_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: queuesphere
+      POSTGRES_PASSWORD: queuesphere_pass
+      POSTGRES_DB: queuesphere_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: queuesphere_server
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://queuesphere:queuesphere_pass@postgres:5432/queuesphere_db?schema=public"
+      JWT_SECRET: "queuesphere_super_secret_jwt_key_2026"
+    depends_on:
+      - postgres
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: queuesphere_client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+
+volumes:
+  pgdata:

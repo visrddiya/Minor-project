@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  BRANCH_ADMIN
+  RECEPTIONIST
+  STAFF
+  CUSTOMER
+}
+
+enum TokenStatus {
+  WAITING
+  CALLING
+  SERVING
+  HELD
+  SKIPPED
+  TRANSFERRED
+  COMPLETED
+  CANCELLED
+}
+
+enum PriorityLevel {
+  NORMAL
+  PRIORITY
+  VIP
+  EMERGENCY
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  password     String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         Role         @default(CUSTOMER)
+  avatarUrl    String?
+  isActive     Boolean      @default(true)
+  branchId     String?
+  branch       Branch?      @relation(fields: [branchId], references: [id])
+  counterId    String?
+  counter      ServiceCounter? @relation(fields: [counterId], references: [id])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Relations
+  tokensServed QueueToken[] @relation("ServedByStaff")
+  appointments Appointment[]
+  auditLogs    AuditLog[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Branch {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  address     String
+  city        String
+  phone       String
+  email       String
+  isActive    Boolean  @default(true)
+  openingTime String   @default("08:00")
+  closingTime String   @default("17:00")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users        User[]
+  departments  Department[]
+  counters     ServiceCounter[]
+  tokens       QueueToken[]
+  appointments Appointment[]
+
+  @@map("branches")
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String
+  code        String
+  prefix      String   @default("A")
+  description String?
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  counters     ServiceCounter[]
+  tokens       QueueToken[]
+  appointments Appointment[]
+
+  @@unique([branchId, code])
+  @@map("departments")
+}
+
+model ServiceCounter {
+  id           String     @id @default(uuid())
+  number       String
+  name         String
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  branchId     String
+  branch       Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  isOnline     Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  staffMembers User[]
+  tokensServed QueueToken[]
+
+  @@unique([branchId, number])
+  @@map("service_counters")
+}
+
+model QueueToken {
+  id             String        @id @default(uuid())
+  tokenNumber    String
+  sequenceNumber Int
+  status         TokenStatus   @default(WAITING)
+  priority       PriorityLevel @default(NORMAL)
+  
+  customerName   String?
+  customerPhone  String?
+  customerEmail  String?
+  
+  branchId       String
+  branch         Branch        @relation(fields: [branchId], references: [id])
+  departmentId   String
+  department     Department    @relation(fields: [departmentId], references: [id])
+  counterId      String?
+  counter        ServiceCounter? @relation(fields: [counterId], references: [id])
+  servedById     String?
+  servedBy       User?         @relation("ServedByStaff", fields: [servedById], references: [id])
+
+  estimatedWaitMinutes Int?
+  calledAt       DateTime?
+  servedAt       DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@map("queue_tokens")
+}
+
+model Appointment {
+  id           String            @id @default(uuid())
+  bookingRef   String            @unique
+  userId       String?
+  user         User?             @relation(fields: [userId], references: [id])
+  customerName String
+  phone        String
+  email        String
+  branchId     String
+  branch       Branch            @relation(fields: [branchId], references: [id])
+  departmentId String
+  department   Department        @relation(fields: [departmentId], references: [id])
+  date         DateTime
+  timeSlot     String
+  status       AppointmentStatus @default(SCHEDULED)
+  qrCodeUrl    String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@map("appointments")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  details   String
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  group     String   @default("GENERAL")
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
